@@ -1,33 +1,41 @@
-import React, { useEffect, useState } from 'react'
-import { StyleSheet, FlatList, ScrollView, Pressable, View } from 'react-native'
-import { getOrdersUser } from '../../api/OrderEndpoints'
+import React, { useEffect, useState, useContext } from 'react'
+import { StyleSheet, FlatList, Pressable, View } from 'react-native'
+import { getOrdersUser, removeOrder } from '../../api/OrderEndpoints'
 import * as GlobalStyles from '../../styles/GlobalStyles'
 import { showMessage } from 'react-native-flash-message'
 import TextRegular from '../../components/TextRegular'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import ImageCard from '../../components/ImageCard'
 import restaurantLogoImage from '../../../assets/restaurantLogo.jpeg'
+import { AuthorizationContext } from '../../context/AuthorizationContext'
+import DeleteModal from '../../components/DeleteModal'
 
-export default function OrdersScreen ({ navigation }) {
+export default function OrdersScreen ({ navigation, route }) {
   const [orders, setOrders] = useState([])
+  const [orderToBeDeleted, setOrderToBeDeleted] = useState(null)
+  const { loggedInUser } = useContext(AuthorizationContext)
 
   useEffect(() => {
-    async function fetchOrders () {
-      try {
-        const fetchedOrders = await getOrdersUser()
-        setOrders(fetchedOrders)
-      } catch (error) {
-        showMessage({
-          message: `There was an error while retrieving orders. ${error} `,
-          type: 'error',
-          style: GlobalStyles.flashStyle,
-          titleStyle: GlobalStyles.flashTextStyle
-        })
-      }
+    if (loggedInUser) {
+      fetchOrders()
+    } else {
+      setOrders(null)
     }
-    fetchOrders()
-  })
+  }, [loggedInUser, route])
 
+  const fetchOrders = async () => {
+    try {
+      const fetchedOrders = await getOrdersUser()
+      setOrders(fetchedOrders)
+    } catch (error) {
+      showMessage({
+        message: `There was an error while retrieving orders. ${error} `,
+        type: 'error',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    }
+  }
   const renderOrder = ({ item }) => {
     if (item.status === 'pending') {
       return (
@@ -42,7 +50,9 @@ export default function OrdersScreen ({ navigation }) {
         <TextRegular>Price: <TextRegular>{item.price}</TextRegular></TextRegular>
         <TextRegular>Address: <TextRegular>{item.address}</TextRegular></TextRegular>
         <Pressable
-            onPress={() => console.log(`Edit pressed for orderId = ${item.id}`)}
+            onPress={() => {
+              navigation.navigate('OrderEditScreen', { order: item })
+            }}
             style={({ pressed }) => [
               {
                 backgroundColor: pressed
@@ -60,8 +70,7 @@ export default function OrdersScreen ({ navigation }) {
         </Pressable>
 
         <Pressable
-
-          onPress={() => console.log(`Delete pressed for orderId = ${item.id}`)}
+          onPress={() => { setOrderToBeDeleted(item) }}
           style={({ pressed }) => [
             {
               backgroundColor: pressed
@@ -71,7 +80,7 @@ export default function OrdersScreen ({ navigation }) {
             styles.actionButton
           ]}>
           <View style={[{ flex: 1, flexDirection: 'row', justifyContent: 'center' }]}>
-            <MaterialCommunityIcons name='delete' color={'white'} size={20}/>
+            <MaterialCommunityIcons name='minecraft' color={'white'} size={20}/>
             <TextRegular textStyle={styles.text}>
               Delete
             </TextRegular>
@@ -96,13 +105,42 @@ export default function OrdersScreen ({ navigation }) {
     }
   }
 
+  const deleteOrder = async (order) => {
+    try {
+      await removeOrder(order.id)
+      await fetchOrders()
+      setOrderToBeDeleted(null)
+      showMessage({
+        message: `Order ${order.name} succesfully removed`,
+        type: 'success',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    } catch (error) {
+      console.log(error)
+      setOrderToBeDeleted(null)
+      showMessage({
+        message: `Order ${order.name} could not be removed.`,
+        type: 'error',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    }
+  }
+
   return (
-    <ScrollView>
+    <>
       <FlatList
       data={orders}
       renderItem={renderOrder}
       />
-    </ScrollView>
+      <DeleteModal
+        isVisible={orderToBeDeleted !== null}
+        onCancel={() => setOrderToBeDeleted(null)}
+        onConfirm={() => deleteOrder(orderToBeDeleted)}>
+        <TextRegular>If the order is not pending cannot be deleted</TextRegular>
+      </DeleteModal>
+    </>
   )
 }
 

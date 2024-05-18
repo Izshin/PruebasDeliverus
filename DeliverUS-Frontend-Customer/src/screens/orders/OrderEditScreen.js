@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { StyleSheet, View, FlatList, ImageBackground, Image, Pressable, TextInput } from 'react-native'
 import { showMessage } from 'react-native-flash-message'
-import { create } from '../../api/OrderEndpoints'
+import { edit, removeOrder } from '../../api/OrderEndpoints'
 import { getDetail } from '../../api/RestaurantEndpoints'
 import ImageCard from '../../components/ImageCard'
 import TextRegular from '../../components/TextRegular'
@@ -12,12 +12,16 @@ import { Formik } from 'formik'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import TextError from '../../components/TextError'
 import { AuthorizationContext } from '../../context/AuthorizationContext'
+import DeleteModal from '../../components/DeleteModal'
 
-export default function RestaurantDetailScreen ({ navigation, route }) {
+export default function OrderEditScreen ({ navigation, route }) {
+  console.log(route)
   const productOrderObj = {}
   let productOrderList = []
   const { loggedInUser } = useContext(AuthorizationContext)
   const [restaurant, setRestaurant] = useState({})
+  const [initialProducts, setinitialProducts] = useState({})
+  const [orderToBeDeleted, setOrderToBeDeleted] = useState(null)
   const initialOrderValues = {
     createdAt: Date(),
     startedAt: null,
@@ -27,15 +31,14 @@ export default function RestaurantDetailScreen ({ navigation, route }) {
     address: loggedInUser.address,
     shippingCosts: 0.0,
     products: null,
-    restaurantId: restaurant.id,
     userId: loggedInUser.id,
     status: 'pending'
 
   }
-  const [button, showButton] = useState(false)
   const [backendErrors, setBackendErrors] = useState()
 
   const productCompararator = function poductComparator (pareja) {
+    console.log(productOrderObj)
     if ((!isNaN(pareja.value))) {
       productOrderObj[pareja.key] = pareja.value
       console.log(productOrderObj)
@@ -43,26 +46,26 @@ export default function RestaurantDetailScreen ({ navigation, route }) {
       return productOrderObj
     }
   }
-  useEffect(() => {
-    fetchRestaurantDetail()
-  }, [route])
 
   useEffect(() => {
     fetchRestaurantDetail()
-  }, [button])
+  }, [route.params.order.restaurantId])
 
-  const createOrder = async (values) => {
+  useEffect(() => {
+    fetchInitialProducts()
+  }, [route.params.order.products])
+
+  const editOrder = async (values) => {
     try {
       setBackendErrors([])
-      console.log(productOrderObj)
-      productOrderList = Object.entries(productOrderObj).filter(([key, value]) => value !== 0).map(([key, value]) => ({ productId: key, quantity: value }))
-      console.log(productOrderList)
+      const definitiveProductObject = { ...initialProducts, ...productOrderObj }
+      console.log(definitiveProductObject)
+      productOrderList = Object.entries(definitiveProductObject).filter(([key, value]) => value !== 0).map(([key, value]) => ({ productId: key, quantity: value }))
       values.products = productOrderList
       console.log(values)
-      await create(values)
-
+      await edit(route.params.order.id, values)
       showMessage({
-        message: 'Order succesfully created',
+        message: 'Order succesfully edited',
         type: 'success',
         style: GlobalStyles.flashStyle,
         titleStyle: GlobalStyles.flashTextStyle
@@ -73,41 +76,15 @@ export default function RestaurantDetailScreen ({ navigation, route }) {
       setBackendErrors(error.errors)
     }
   }
+  const startingProducts = function startingProducts (productsOrder) {
+    const productosIniciales = {}
+    for (const p of productsOrder) {
+      productosIniciales[p.OrderProducts.ProductId] = p.OrderProducts.quantity
+    }
+    return productosIniciales
+  }
   const renderHeader = () => {
-    if (button === false) {
-      return (
-        <View>
-          <ImageBackground source={(restaurant?.heroImage) ? { uri: process.env.API_BASE_URL + '/' + restaurant.heroImage, cache: 'force-cache' } : undefined} style={styles.imageBackground}>
-            <View style={styles.restaurantHeaderContainer}>
-              <TextSemiBold textStyle={styles.textTitle}>{restaurant.name}</TextSemiBold>
-              <Image style={styles.image} source={restaurant.logo ? { uri: process.env.API_BASE_URL + '/' + restaurant.logo, cache: 'force-cache' } : undefined} />
-              <TextRegular textStyle={styles.description}>{restaurant.description}</TextRegular>
-              <TextRegular textStyle={styles.description}>{restaurant.restaurantCategory ? restaurant.restaurantCategory.name : ''}</TextRegular>
-            </View>
-          </ImageBackground>
-          <Pressable
-          onPress={() => {
-            showButton(true)
-          }}
-          style={({ pressed }) => [
-            {
-              backgroundColor: pressed
-                ? GlobalStyles.brandGreenTap
-                : GlobalStyles.brandGreen
-            },
-            styles.button
-          ]}>
-          <View style={[{ flex: 1, flexDirection: 'row', justifyContent: 'center' }]}>
-            <MaterialCommunityIcons name='plus-circle' color={'white'} size={20} />
-            <TextRegular textStyle={styles.text}>
-              Create Order
-            </TextRegular>
-          </View>
-        </Pressable>
-        </View>
-      )
-    } else {
-      return (
+    return (
         <View>
           <ImageBackground source={(restaurant?.heroImage) ? { uri: process.env.API_BASE_URL + '/' + restaurant.heroImage, cache: 'force-cache' } : undefined} style={styles.imageBackground}>
             <View style={styles.restaurantHeaderContainer}>
@@ -120,15 +97,13 @@ export default function RestaurantDetailScreen ({ navigation, route }) {
           {backendErrors &&
                   backendErrors.map((error, index) => <TextError key={index}>{error.msg}</TextError>)}
           <Formik
-         /* initialValues={initialOrderValues} */
-          onSubmit={createOrder}
+          onSubmit={editOrder}
           initialValues={initialOrderValues}
           >
 
           {({ handleSubmit, setFieldValue, values }) => (
           <Pressable
-         /* onPressIn={setFieldValue('orderProducts', productOrderList)}
-          onPressOut={handleSubmit} */
+
           onPress={handleSubmit}
           style={({ pressed }) => [
             {
@@ -141,16 +116,14 @@ export default function RestaurantDetailScreen ({ navigation, route }) {
           <View style={[{ flex: 1, flexDirection: 'row', justifyContent: 'center' }]}>
             <MaterialCommunityIcons name='plus-circle' color={'white'} size={20} />
             <TextRegular textStyle={styles.text}>
-              Confirm Order
+              Confirm Edited Order
             </TextRegular>
           </View>
         </Pressable>
           )}
            </Formik>
         <Pressable
-          onPress={() => {
-            showButton(false)
-          }}
+          onPress={() => { setOrderToBeDeleted(route.params.order) }}
           style={({ pressed }) => [
             {
               backgroundColor: pressed
@@ -162,18 +135,37 @@ export default function RestaurantDetailScreen ({ navigation, route }) {
           <View style={[{ flex: 1, flexDirection: 'row', justifyContent: 'center' }]}>
             <MaterialCommunityIcons name='minus-circle' color={'white'} size={20} />
             <TextRegular textStyle={styles.text}>
-              Discard Order
+              Delete Order
             </TextRegular>
           </View>
         </Pressable>
         </View>
-      )
+    )
+  }
+  const deleteOrder = async (order) => {
+    try {
+      await removeOrder(order.id)
+      setOrderToBeDeleted(null)
+      showMessage({
+        message: `Order ${order.name} succesfully removed`,
+        type: 'success',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    } catch (error) {
+      console.log(error)
+      setOrderToBeDeleted(null)
+      showMessage({
+        message: `Order ${order.name} could not be removed.`,
+        type: 'error',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
     }
   }
 
   const renderProduct = ({ item }) => {
-    if (button === true && item.availability) {
-      return (
+    return (
         <ImageCard
           imageUri={item.image ? { uri: process.env.API_BASE_URL + '/' + item.image } : defaultProductImage}
           title={item.name}
@@ -186,24 +178,11 @@ export default function RestaurantDetailScreen ({ navigation, route }) {
             <View style = {styles.inputContainer} >
                 <TextInput
                   onChangeText={v => productCompararator({ key: item.id, value: Number(v) })}
-                  defaultValue="0"
-
+                  defaultValue={initialProducts[item.id] ? String(initialProducts[item.id]) : '0'}
                 />
               </View>
         </ImageCard>
-      )
-    } else {
-      return <ImageCard
-          imageUri={item.image ? { uri: process.env.API_BASE_URL + '/' + item.image } : defaultProductImage}
-          title={item.name}
-        >
-          <TextRegular numberOfLines={2}>{item.description}</TextRegular>
-          <TextSemiBold textStyle={styles.price}>{item.price.toFixed(2)}€</TextSemiBold>
-          {!item.availability &&
-            <TextRegular textStyle={styles.availability }>Not available</TextRegular>
-          }
-        </ImageCard>
-    }
+    )
   }
 
   const renderEmptyProductsList = () => {
@@ -216,7 +195,7 @@ export default function RestaurantDetailScreen ({ navigation, route }) {
 
   const fetchRestaurantDetail = async () => {
     try {
-      const fetchedRestaurant = await getDetail(route.params.id)
+      const fetchedRestaurant = await getDetail(route.params.order.restaurantId)
       setRestaurant(fetchedRestaurant)
     } catch (error) {
       showMessage({
@@ -227,16 +206,37 @@ export default function RestaurantDetailScreen ({ navigation, route }) {
       })
     }
   }
+  const fetchInitialProducts = async () => {
+    try {
+      const productos = startingProducts(route.params.order.products)
+      setinitialProducts(productos)
+    } catch (error) {
+      showMessage({
+        message: 'There was an error while retrieving order products',
+        type: 'error',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    }
+  }
 
   return (
-      <FlatList
-          ListHeaderComponent={renderHeader}
-          ListEmptyComponent={renderEmptyProductsList}
-          style={styles.container}
-          data={restaurant.products}
-          renderItem={renderProduct}
-          keyExtractor={item => item.id.toString()}
-        />
+      <>
+          <FlatList
+              ListHeaderComponent={renderHeader}
+              ListEmptyComponent={renderEmptyProductsList}
+              style={styles.container}
+              data={restaurant.products}
+              renderItem={renderProduct}
+              keyExtractor={item => item.id.toString()}
+            />
+          <DeleteModal
+            isVisible={orderToBeDeleted !== null}
+            onCancel={() => setOrderToBeDeleted(null)}
+            onConfirm={() => deleteOrder(orderToBeDeleted) && navigation.navigate('OrdersScreen')}>
+            <TextRegular>If the order is not pending cannot be deleted</TextRegular>
+            </DeleteModal>
+        </>
   )
 }
 
