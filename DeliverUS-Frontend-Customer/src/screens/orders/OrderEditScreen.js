@@ -133,7 +133,7 @@ export default function OrderEditScreen ({ navigation, route }) {
             styles.button
           ]}>
           <View style={[{ flex: 1, flexDirection: 'row', justifyContent: 'center' }]}>
-            <MaterialCommunityIcons name='minus-circle' color={'white'} size={20} />
+            <MaterialCommunityIcons name='minecraft' color={'white'} size={20} />
             <TextRegular textStyle={styles.text}>
               Delete Order
             </TextRegular>
